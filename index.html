@@ -27,20 +27,20 @@
 <body>
     <input type="file" id="videoInput" accept="video/*">
     <label for="pixelSize">Pixel Size:</label>
-    <input type="number" id="pixelSize" value="15" min="1">
+    <input type="number" id="pixelSize" value="18" min="1">
     <label for="brightness">Brightness:</label>
-    <input type="number" id="brightness" value="100" min="0" max="200">
+    <input type="number" id="brightness" value="110" min="0" max="200">
     <label for="colorPalette">Color Palette:</label>
     <select id="colorPalette">
+        <option value="atari">Atari</option>
         <option value="basic">Basic</option>
         <option value="grayscale">Grayscale</option>
         <option value="nes">NES</option>
         <option value="c64">Commodore 64</option>
         <option value="gameboy">GameBoy</option>
-        <option value="atari">Atari</option>
     </select>
     <button id="download">Download Pixel Art Video</button>
-    <video id="video" controls></video>
+    <video id="video" controls muted></video>
     <canvas id="canvas"></canvas>
     <div id="palettePreview"></div>
     <script>
@@ -55,9 +55,29 @@
         const palettePreview = document.getElementById('palettePreview');
         let pixelSize = parseInt(pixelSizeInput.value, 10);
         let brightness = parseInt(brightnessInput.value, 10) / 100;
-        let colorPalette = 'basic';
+        let colorPalette = 'atari';
+        let mediaRecorder;
+        let recordedChunks = [];
 
         const palettes = {
+            atari: [
+                [0, 0, 0], [68, 68, 0], [112, 40, 0], [132, 24, 0], [136, 0, 0], [120, 0, 92],
+                [72, 0, 120], [20, 0, 132], [0, 0, 136], [0, 24, 124], [0, 44, 92], [0, 64, 44],
+                [0, 60, 0], [20, 56, 0], [44, 48, 0], [68, 40, 0], [64, 64, 64], [100, 100, 16],
+                [132, 68, 20], [152, 52, 24], [156, 32, 32], [140, 32, 116], [96, 32, 144],
+                [48, 32, 152], [28, 32, 156], [28, 56, 144], [28, 76, 120], [28, 92, 72],
+                [32, 92, 32], [52, 92, 28], [76, 80, 28], [100, 72, 24], [108, 108, 108],
+                [132, 132, 36], [152, 92, 40], [172, 80, 48], [176, 60, 60], [160, 60, 136],
+                [120, 60, 164], [76, 60, 176], [56, 64, 176], [56, 84, 168], [56, 104, 144],
+                [56, 124, 100], [64, 124, 64], [80, 124, 56], [104, 112, 52], [132, 104, 48],
+                [144, 144, 144], [160, 160, 52], [172, 120, 60], [192, 104, 72], [192, 88, 88],
+                [176, 88, 156], [140, 88, 184], [104, 88, 192], [80, 92, 192], [80, 112, 188],
+                [80, 132, 172], [80, 156, 128], [92, 156, 92], [108, 152, 80], [132, 140, 76],
+                [160, 132, 76], [176, 176, 176], [184, 184, 64], [188, 140, 76], [208, 128, 92],
+                [208, 112, 112], [192, 112, 176], [160, 112, 204], [124, 112, 208], [17,26,255],
+                [67,85,255], [138,133,255], [34,45,255], [37,41,45,255], [30,39,255], [142,142,255],
+                [91,94,255]
+            ],
             basic: [[0,0,0], [255,255,255], [255,0,0], [0,255,0], [0,0,255], [255,255,0], [0,255,255], [255,0,255]],
             grayscale: [[0,0,0], [255,255,255], [128,128,128], [64,64,64], [192,192,192]],
             nes: [
@@ -73,18 +93,6 @@
             ],
             gameboy: [
                 [15,56,15], [48,98,48], [139,172,15], [155,188,15]
-            ],
-            // atari: [
-            // [0,0,0], [162,162,162], [252,252,252], [252,116,96], [220,144,115], [144,116,128],
-            // [116,96,80], [124,104,168], [168,64,68], [144,116,116], [104,144,116], [136,64,124],
-            // [172,144,104], [140,96,124], [124,88,96], [132,112,108], [134,117,106]
-            // ]
-            atari: [
-                [0,0,0], [162,162,162], [252,252,252], [220,144,115], [144,116,128],
-                [116,96,80], [124,104,168], [144,116,116], [104,144,116], [172,144,104], 
-                [140,96,124], [124,88,96], [132,112,108], [134,117,106],
-                [/* Extrahované barvy z obrázku zde */]
-                [89, 82, 93], [185, 183, 187], [220, 215, 208], [166, 150, 142], [123, 98, 91]
             ]
         };
 
@@ -116,6 +124,16 @@
         function processVideo() {
             video.play();
             video.addEventListener('play', () => {
+                const stream = canvas.captureStream();
+                mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+                mediaRecorder.ondataavailable = (e) => {
+                    if (e.data.size > 0) {
+                        recordedChunks.push(e.data);
+                    }
+                };
+                mediaRecorder.onstop = downloadVideo;
+                mediaRecorder.start();
+
                 const process = () => {
                     if (!video.paused && !video.ended) {
                         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -192,6 +210,25 @@
                 palettePreview.appendChild(div);
             });
         }
+
+        function downloadVideo() {
+            const blob = new Blob(recordedChunks, { type: 'video/webm' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = 'pixel_art_video.webm';
+            document.body.appendChild(a);
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        downloadButton.addEventListener('click', () => {
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+            }
+        });
+
         // Zobrazení výchozí palety při načtení stránky
         updatePalettePreview();
     </script>
